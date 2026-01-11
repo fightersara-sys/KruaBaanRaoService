@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>ร้านครัวบ้านเรา</title>
+
+  <style>
+    body { 
+      margin:0;
+      font-family:'Sarabun',sans-serif; 
+      background:#fffaf5; 
+    }
+
+    /* 🔥 BG ร้านแบบเบลอและจาง */
+    .bg-blur {
+      position: fixed;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+      filter: blur(8px);
+      opacity: 0.15;
+      z-index: -1;
+    }
+
+    .overlay { 
+      display:flex; 
+      justify-content:center; 
+      align-items:center; 
+      height:100vh; 
+      padding:20px;
+    }
+
+    .card { 
+      background:white; 
+      padding:30px; 
+      border-radius:15px; 
+      box-shadow:0 0 20px rgba(0,0,0,0.1); 
+      text-align:center; 
+      width:320px; 
+    }
+
+    .brand-logo {
+      width:70px;
+      height:70px;
+      border-radius:10px;
+      object-fit:cover;
+      margin-bottom:10px;
+
+      display:block;         /* สำคัญ */
+      margin-left:auto;      /* จัดกลาง */
+      margin-right:auto;     /* จัดกลาง */
+
+      display:none; /* ให้โชว์หลังโหลดรูป */
+}
+
+    .title {
+      color:#f75d00;
+      font-size:22px;
+      margin:5px 0 3px 0;
+      font-weight:700;
+    }
+
+    .concept {
+      font-size:14px;
+      margin-bottom:15px;
+      color:#555;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 12px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 16px;
+      box-sizing: border-box; /* ⭐ */
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-top: 5px;
+      box-sizing: border-box; /* ⭐ กัน error layout */
+    }
+
+    button.main { background:#ffa733; color:white; }
+    button.main:hover { background:#ff8c00; }
+
+    .meta { 
+      margin-top:12px; 
+      font-size:13px; 
+      color:#666; 
+      line-height:1.5;
+    }
+
+    .admin-link { 
+      margin-top:10px; 
+      font-size:12px; 
+      color:#999; 
+      cursor:pointer; 
+      text-decoration:underline; 
+    }
+
+    /* ===== Responsive Core ===== */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  -webkit-text-size-adjust: 100%;
+}
+
+img {
+  max-width: 100%;
+}
+
+/* Card / Container */
+.card,
+.container,
+.wrapper {
+  max-width: 100%;
+}
+
+/* Buttons & inputs */
+input, select, textarea, button {
+  font-size: 16px; /* กัน iOS zoom */
+}
+
+/* Mobile layout */
+@media (max-width: 768px) {
+
+  body {
+    padding: 0;
+  }
+
+  .overlay {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .card {
+    width: 100% !important;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 20px;
+    border-radius: 14px;
+  }
+
+  .title {
+    font-size: 20px;
+  }
+
+  .concept {
+    font-size: 13px;
+  }
+
+  button {
+    padding: 14px;
+    font-size: 16px;
+  }
+
+  input {
+    padding: 14px;
+    font-size: 16px;
+  }
+}
+@media (max-width: 768px) {
+
+  body {
+    background:#fff;
+  }
+
+  .overlay {
+    align-items: flex-start;
+    padding-top: 30px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+    border-radius: 20px;
+    padding: 22px;
+  }
+
+  .brand-logo {
+    width: 90px;
+    height: 90px;
+  }
+
+  .title {
+    font-size: 24px;
+  }
+
+  .concept {
+    font-size: 14px;
+  }
+
+  input {
+    font-size: 16px;
+    padding: 14px;
+    border-radius: 10px;
+  }
+
+  button {
+    padding: 16px;
+    border-radius: 12px;
+    font-size: 16px;
+  }
+
+  #shopClosedBox h2 {
+    font-size: 22px;
+  }
+
+  #shopClosedBox p {
+    font-size: 14px;
+  }
+}
+  </style>
+
+  <script src="https://unpkg.com/@supabase/supabase-js"></script>
+  <script>
+    const supabaseUrl = "https://vxutzcrwqbnkcwxtdphy.supabase.co";
+    const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4dXR6Y3J3cWJua2N3eHRkcGh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0NzkzNDQsImV4cCI6MjA3NTA1NTM0NH0.zwbcu_4eGAiRTaX7QBwgrJhWgCda58FW-boeJM-ZlKg";
+    const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+    function isWithinOpenTime(open, close) {
+  if (!open || !close) return true;
+
+  const now = new Date();
+  const [oh, om] = open.split(":").map(Number);
+  const [ch, cm] = close.split(":").map(Number);
+
+  const start = new Date();
+  start.setHours(oh, om, 0, 0);
+
+  const end = new Date();
+  end.setHours(ch, cm, 0, 0);
+
+  return now >= start && now <= end;
+}
+
+    async function checkShopOpen() {
+  const { data, error } = await supabaseClient
+    .from("shop_settings")
+    .select("is_open")
+    .eq("id", 1)
+    .maybeSingle();   // 🔥 สำคัญ
+
+  if (error) {
+    console.error("checkShopOpen error", error);
+    return true; // ถ้า error ให้ถือว่าเปิด
+  }
+
+  // ถ้ายังไม่มี row → ถือว่าเปิด
+  return data?.is_open !== false;
+}
+
+    /* =====================================================
+       โหลดข้อมูลร้านจาก Table store_settings
+    ===================================================== */
+    async function loadStoreInfo() {
+      const { data, error } = await supabaseClient
+        .from("store_settings")
+        .select("*")
+        .eq("id", 1)
+        .single();
+
+      if (!data) return;
+
+      // โลโก้ร้าน
+      if (data.logo_url) {
+        const logo = document.getElementById("storeLogo");
+        logo.src = data.logo_url;
+        logo.style.display = "block";
+      }
+
+      // ชื่อร้าน
+      document.getElementById("storeTitle").innerText = data.store_name || "ร้านครัวบ้านเรา";
+
+      // Concept ร้าน
+      document.getElementById("storeConcept").innerText = data.store_concept || "";
+
+      // เวลาเปิด-ปิด + Line
+      document.getElementById("storeMeta").innerHTML =
+        `เวลาเปิด: ${data.open_time} - ${data.close_time}<br>LINE ID: ${data.line_id}`;
+
+      // 🌄 Background ร้าน
+      if (data.store_background) {
+        const bg = document.getElementById("bgImage");
+        bg.style.backgroundImage = `url('${data.store_background}')`;
+      }
+    }
+
+    async function goToMenu() {
+  try {
+    // โหลดสถานะร้าน
+    const { data: shop } = await supabaseClient
+      .from("shop_settings")
+      .select("is_open")
+      .eq("id", 1)
+      .maybeSingle();   // 🔥
+
+    // ถ้าไม่มี row → ถือว่าเปิด
+    const isOpen = shop?.is_open !== false;
+
+    // โหลดเวลา (optional)
+    const { data: store } = await supabaseClient
+      .from("store_settings")
+      .select("open_time, close_time")
+      .eq("id", 1)
+      .maybeSingle();   // 🔥 สำคัญ
+
+    const timeOK = store
+      ? isWithinOpenTime(store.open_time, store.close_time)
+      : true;          // ถ้าไม่มีแถว = ไม่บล็อก
+
+    if (!isOpen || !timeOK) {
+      alert("วันนี้ร้านปิดจ้า 🙏");
+      return;
+    }
+
+    const house = document.getElementById("houseNumber").value.trim();
+    if (!house) return alert("กรุณากรอกบ้านเลขที่");
+
+    localStorage.setItem("houseNumber", house);
+    window.location.href = "Menu.html";
+
+  } catch (err) {
+    console.error("goToMenu error", err);
+    alert("ระบบร้านค้ามีปัญหา กรุณาลองใหม่");
+  }
+}
+
+    async function checkOrder() {
+      let houseNo = prompt("กรอกบ้านเลขที่เพื่อดูสถานะออเดอร์");
+      if (!houseNo) return;
+
+      localStorage.setItem("houseNumber", houseNo);
+
+      // ✅ เพิ่มตรงนี้ (สำคัญมาก)
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+
+      const { data, error } = await supabaseClient
+       .from("orders")
+       .select("id")
+       .eq("house", houseNo)
+       .not("status", "eq", "ยกเลิก")
+       .gte("created_at", startOfToday.toISOString())
+       .lte("created_at", endOfToday.toISOString())
+       .order("created_at", { ascending: false })
+       .limit(1)
+       .single();
+
+      if (error || !data) {
+        alert("ไม่พบออเดอร์ของวันนี้\nหากเป็นออเดอร์เก่า กรุณาติดต่อร้าน");
+        return;
+      }
+
+      // ✅ เจอออเดอร์ → เก็บ ID แล้วไปหน้าสถานะ
+      localStorage.setItem("currentOrderId", data.id);
+      window.location.href = "order-status.html";
+    }
+
+    function subscribeShopStatusRealtime() {
+  supabaseClient
+    .channel("shop-settings-realtime")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "shop_settings", filter: "id=eq.1" },
+      () => initIndex()
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "store_settings", filter: "id=eq.1" },
+      () => initIndex()
+    )
+    .subscribe();
+}
+
+    let shopRealtimeStarted = false;
+
+async function initIndex() {
+  const isOpen = await checkShopOpen();
+
+  const orderBox = document.getElementById("orderSection");
+  const closedBox = document.getElementById("shopClosedBox");
+
+  if (!isOpen) {
+    orderBox.style.display = "none";
+    closedBox.style.display = "block";
+  } else {
+    orderBox.style.display = "block";
+    closedBox.style.display = "none";
+  }
+
+  loadMenus();
+  loadOptions();
+}
+
+    window.onload = async () => {
+  await loadStoreInfo();
+  await initIndex();
+  subscribeShopStatusRealtime();   // ✅ เรียกแค่ครั้งเดียว
+};
+  </script>
+
+</head>
+<body>
+
+  <!-- 🔥 BG ร้านแบบจาง + เบลอ -->
+  <div id="bgImage" class="bg-blur"></div>
+
+  <div class="overlay">
+    
+    <div class="card">
+
+      <!-- 🔹 ส่วนหัวร้าน (แสดงตลอด) -->
+      <img id="storeLogo" class="brand-logo" />
+      <div id="storeTitle" class="title"></div>
+      <div id="storeConcept" class="concept"></div>
+
+      <!-- 🔹 ส่วนสั่งอาหาร -->
+      <div id="orderSection">
+        <input type="text" id="houseNumber" placeholder="กรอกบ้านเลขที่ของคุณ">
+        <button class="main" onclick="goToMenu()">เข้าสั่งอาหาร</button>
+        <button onclick="checkOrder()">ตรวจสอบออเดอร์</button>
+      </div>
+
+      <!-- 🔹 ส่วนร้านปิด -->
+      <div id="shopClosedBox" style="display:none;text-align:center;padding:20px;">
+        <h2>🚫 ร้านปิดแล้วจ้า 🚫</h2>
+        <p>🙏 ขออภัยในความไม่สะดวก 🙏</p>
+      </div>
+
+      <!-- 🔹 footer ร้าน -->
+      <div id="storeMeta" class="meta"></div>
+
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
