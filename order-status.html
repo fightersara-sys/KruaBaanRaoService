@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>สถานะออเดอร์</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body { font-family: Tahoma, background:#fffaf5; margin:0; color:#333; }
+  header { background:#ff6600; color:white; padding:15px; text-align:center; font-size:20px; }
+  .container { max-width:720px; margin:20px auto; background:white; border-radius:12px; padding:20px; box-shadow:0 3px 8px rgba(0,0,0,0.15); }
+  h3 { color:#ff6600; margin-bottom:10px; }
+  .info-row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px; }
+  .info { flex:1 1 160px; background:#fff8f2; border-radius:8px; padding:10px; border:1px solid #fde5d6; }
+  .label { font-size:12px; color:#888; }
+  .value { font-weight:700; margin-top:6px; font-size:16px; color:#333; }
+  .status-box { text-align:center; background:#fff3e6; color:#ff6600; padding:10px; border-radius:8px; font-weight:bold; margin-top:10px; }
+  .menu-list { background:#fdf5ee; padding:12px; border-radius:8px; margin-top:10px; }
+  .menu-item { display:flex; gap:12px; align-items:flex-start; padding:8px 0; border-bottom:1px dashed #fde7d6; }
+  .menu-item:last-child{ border-bottom:none; }
+  .menu-thumb { width:72px; height:56px; background:#fff; border-radius:8px; object-fit:cover; border:1px solid #eee; }
+  .menu-right { flex:1; }
+  .menu-name { font-weight:700; color:#333; }
+  .menu-options { font-size:13px; color:#555; margin-top:6px; }
+  .menu-price { color:#ff6600; font-weight:700; }
+  .menu-qty { font-size:13px; color:#333; margin-left:8px; }
+  .menu-total { font-weight:bold; text-align:right; color:#ff6600; margin-top:8px; }
+  .pay-section { margin-top:15px; padding:12px; background:#fff3e6; border-radius:10px; display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap; }
+  .qr-box, .delivery-box { flex:1 1 280px; }
+  img.qr, img.delivery, img.slip { width:100%; max-height:260px; object-fit:contain; border-radius:10px; margin-top:10px; border:1px solid #eee; background:white; padding:8px; }
+  .btn { display:inline-block; padding:8px 16px; background:#ff6600; color:white; border:none; border-radius:8px; margin:10px 5px 0 5px; cursor:pointer; }
+  .btn:hover { background:#ff7a1f; }
+  .small { font-size:13px; color:#777; }
+  /* popup */
+  .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); justify-content:center; align-items:center; z-index:50; }
+  .modal { background:white; padding:18px; border-radius:10px; width:90%; max-width:420px; box-shadow:0 6px 24px rgba(0,0,0,0.25); }
+  .modal h4 { margin:6px 0 10px 0; color:#ff6600; }
+  input[type=file]{ width:100%; }
+  input[type=number], input[type=text]{ width:100%; padding:8px; border-radius:8px; border:1px solid #ddd; margin-top:6px; }
+  .muted { color:#666; font-size:13px; }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.0/dist/umd/supabase.min.js"></script>
+<script>
+const supabaseUrl = "https://vxutzcrwqbnkcwxtdphy.supabase.co";
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4dXR6Y3J3cWJua2N3eHRkcGh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0NzkzNDQsImV4cCI6MjA3NTA1NTM0NH0.zwbcu_4eGAiRTaX7QBwgrJhWgCda58FW-boeJM-ZlKg";
+const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+const DEFAULT_MENU_IMAGE = "https://vxutzcrwqbnkcwxtdphy.supabase.co/storage/v1/object/public/Logo/logo.png";
+
+
+let orderId = null;
+let currentOrder = null;
+let latestStoreQRUrl = null;
+let menuImageMap = {};
+let optionMap = {};
+
+
+window.addEventListener("load", init);
+
+async function loadMenuImages(){
+  const { data, error } = await supabaseClient
+    .from("menus")
+    .select("id, image_url");
+
+  if (error) {
+    console.error("โหลดรูปเมนูไม่สำเร็จ", error);
+    return;
+  }
+
+  (data || []).forEach(m => {
+    menuImageMap[m.id] = m.image_url || DEFAULT_MENU_IMAGE;
+  });
+}
+
+async function loadOptions() {
+  const { data, error } = await supabaseClient
+    .from("options")
+    .select("id, name, price");
+
+  if (error) {
+    console.error("โหลด options ไม่สำเร็จ", error);
+    return;
+  }
+
+  optionMap = {};
+  (data || []).forEach(o => {
+    optionMap[o.id] = {
+      name: o.name,
+      price: Number(o.price || 0)
+    };
+  });
+}
+
+async function init(){
+  orderId = Number(localStorage.getItem("currentOrderId"));
+if (!orderId) {
+  document.getElementById("container").innerHTML =
+    "<h3>ไม่พบออเดอร์ที่กำลังดำเนินการ</h3>";
+  return;
+}
+  orderId = Number(orderId);
+  await loadMenuImages();
+  await loadOptions();
+  await loadStoreQR(); 
+  await loadOrder();
+  subscribeRealtime();
+}
+
+async function loadStoreQR(){
+  try {
+    const { data, error } = await supabaseClient
+      .storage
+      .from("payment-qr")
+      .list("", { limit: 1, sortBy: { column: "created_at", order: "desc" } });
+
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      const file = data[0];
+      const { data: url } = supabaseClient
+        .storage
+        .from("payment-qr")
+        .getPublicUrl(file.name);
+
+      latestStoreQRUrl = url.publicUrl;
+      console.log("Loaded store QR:", latestStoreQRUrl);
+    }
+  } catch(e){
+    console.warn("QR load error", e);
+  }
+}
+
+// โหลด order จาก DB
+async function loadOrder(){
+  const { data } = await supabaseClient
+  .from("orders")
+  .select("*")
+  .eq("id", orderId)
+  .single();
+
+currentOrder = data;
+renderOrder(data);
+}
+
+function renderOrder(o){
+  // header bits
+  document.getElementById("orderId").innerText = formatOrderId(o);
+  document.getElementById("house").innerText = o.house || "-";
+  document.getElementById("queue").innerText = o.queue_number ? `#${o.queue_number}` : "-";
+  document.getElementById("status").innerText = o.status || "-";
+
+  // menu items
+const list = document.getElementById("menuList");
+list.innerHTML = "";
+let grandTotal = 0;
+
+// ✅ FIX: ดึง items จาก order
+const items = Array.isArray(o.items) ? o.items : [];
+
+if (items.length === 0) {
+  list.innerHTML = `<div class="muted">ไม่มีรายการอาหาร</div>`;
+  return;
+}
+
+items.forEach(it => {
+  const qty = Number(it.qty || 1);
+  const basePrice = Number(it.price || 0);
+
+  let optionLines = "";
+let optionTotal = 0;
+
+if (it.options) {
+  let opts = [];
+
+  if (Array.isArray(it.options)) {
+    opts = it.options;
+  } else if (typeof it.options === "object") {
+    opts = Object.entries(it.options).map(([k,v]) => ({
+      name: k,
+      price: v
+    }));
+  }
+
+  opts.forEach(opt => {
+  const optId = opt.id;
+  const optData = optionMap[optId];
+
+  if (!optData) {
+    optionLines += `
+      <div style="color:#999;">
+        - (ตัวเลือกถูกลบแล้ว)
+      </div>
+    `;
+    return;
+  }
+
+  optionTotal += optData.price;
+
+  optionLines += `
+    <div>
+      - ${optData.name}
+      ${optData.price > 0
+        ? `<span style="color:#ff0000;"> + ฿${optData.price}</span>`
+        : ""}
+    </div>
+  `;
+});
+}
+
+if (!optionLines) optionLines = `<div>- ธรรมดา</div>`;
+
+  const unitTotal = basePrice + optionTotal;
+  const itemTotal = unitTotal * qty;
+  grandTotal += itemTotal;
+
+  const row = document.createElement("div");
+  row.className = "menu-item";
+  row.innerHTML = `
+    <img class="menu-thumb"
+         src="${menuImageMap[it.menu_id] || DEFAULT_MENU_IMAGE}"
+         onerror="this.src='${DEFAULT_MENU_IMAGE}'">
+
+    <div class="menu-right">
+      <div class="menu-name">
+        ${qty} × ${it.food}
+        <span style="float:right;color:#ff0000;">
+          ราคา ฿${basePrice}
+        </span>
+      </div>
+
+      <div class="menu-options">
+        ${optionLines}
+        ${it.note ? `<div style="color:#888;">หมายเหตุ: ${it.note}</div>` : ""}
+      </div>
+
+      <div class="menu-total">
+        รวม ฿${itemTotal.toLocaleString()}
+      </div>
+    </div>
+  `;
+  list.appendChild(row);
+});
+
+// รวมยอด
+list.insertAdjacentHTML(
+  "beforeend",
+  `<div class="menu-total">ยอดรวมทั้งหมด: ฿${grandTotal.toLocaleString()}</div>`
+);
+
+  // show QR of order or store
+  const qrBox = document.getElementById("qrBox");
+  const slipBox = document.getElementById("slipBox");
+  qrBox.innerHTML = "";
+  slipBox.innerHTML = "";
+
+  // show current payment info
+  if(o.payment_method === "QR" && o.payment_qr) {
+    qrBox.innerHTML = `<div class="muted">ชำระด้วย QR (รอตรวจสอบ)</div><img src="${o.payment_qr}" class="qr" alt="QR">`;
+  } else if(o.payment_method === "เงินสด" && o.cash_paid != null) {
+    qrBox.innerHTML = `<div class="muted">ชำระด้วยเงินสด (ลูกค้าจ่าย: ฿${Number(o.cash_paid).toLocaleString()} ทอน: ฿${Number(o.cash_change||0).toLocaleString()})</div>`;
+  } else {
+    // show the two payment buttons
+    qrBox.innerHTML = `
+      <div style="display:flex; gap:8px;">
+        <button class="btn" onclick="openQRPay(${grandTotal})">สแกนจ่าย (QR)</button>
+        <button class="btn" onclick="openCashPay(${grandTotal})">เงินสด</button>
+      </div>
+      <div class="small muted" style="margin-top:8px;">(กดปุ่มเพื่อเลือกวิธีชำระ จากนั้นทำตามขั้นตอนที่ขึ้น)</div>
+    `;
+  }
+
+  // slip (if uploaded)
+  if (o.payment_slip) {
+  const slipUrl = o.payment_slip; // ✅ ใช้ตรง ๆ
+
+  slipBox.innerHTML = `
+    <div class="muted">ลูกค้าอัปโหลดสลิปแล้ว (รอการตรวจสอบจากร้าน)</div>
+    <img src="${slipUrl}" class="slip" alt="slip"
+         onerror="this.style.display='none'">
+  `;
+}
+
+  // delivery image
+  const deliveryDiv = document.getElementById("deliveryImg");
+  if (o.delivery_image) {
+    deliveryDiv.innerHTML = `<img src="${o.delivery_image}" class="delivery">`;
+} else {
+    deliveryDiv.innerHTML = "";
+}
+
+    // show / hide buttons by status
+  const btnAdd    = document.getElementById("btnAdd");
+  const btnEdit   = document.getElementById("btnEdit");
+  const btnCancel = document.getElementById("btnCancel");
+
+  const blockedStatus = ["กำลังทำอาหาร","กำลังจัดส่ง","ส่งแล้ว"];
+
+  if (blockedStatus.includes(o.status)) {
+    if (btnAdd)    btnAdd.style.display = "none";
+    if (btnEdit)   btnEdit.style.display = "none";
+    if (btnCancel) btnCancel.style.display = "none";
+  } else {
+    if (btnAdd)    btnAdd.style.display = "inline-block";
+    if (btnEdit)   btnEdit.style.display = "inline-block";
+    if (btnCancel) btnCancel.style.display = "inline-block";
+  }
+}
+
+  const cancelBtnAllowed = ["รอรับออเดอร์"];
+  if(!cancelBtnAllowed.includes(o.status)){
+    document.querySelector("button[onclick='confirmCancelOrder()']")
+      ?.style.setProperty("display","none");
+}
+
+
+// format order id like YYYYMMDD-00008 (uses created_at if present)
+function formatOrderId(o){
+  try{
+    const id = o.id || 0;
+    const d = o.created_at ? new Date(o.created_at) : new Date();
+    const dateStr = d.toISOString().slice(0,10).replace(/-/g,"");
+    return `${dateStr}-${String(id).padStart(5,"0")}`;
+  }catch(e){ return `#${o.id}`;}
+}
+
+/* --------- Payment flows --------- */
+
+// open QR payment popup
+async function openQRPay(total){
+  // show QR = orders.payment_qr || latestStoreQRUrl
+  let qr = currentOrder.payment_qr || latestStoreQRUrl || null;
+  // ✅ DEBUG สำคัญ (ข้อ 4)
+  console.log("QR used in popup:", qr);
+  // create popup content
+  const overlay = document.getElementById("overlay");
+  overlay.style.display = "flex";
+  document.getElementById("modalContent").innerHTML = `
+    <h4>สแกนจ่าย (QR)</h4>
+    <div class="muted">ยอดที่ต้องชำระ: <b>฿${Number(total).toLocaleString()}</b></div>
+    <div style="margin-top:10px;">
+      ${qr ? `<img src="${qr}" class="qr">` : `<div class="muted">ร้านยังไม่มี QR ให้สแกน</div>`}
+    </div>
+    <div style="margin-top:10px;">
+      <div class="muted">หากชำระด้วย QR แล้ว กรุณาอัปโหลดสลิปการโอน (รูปภาพ)</div>
+      <input type="file" id="popupSlipFile" accept="image/*" style="margin-top:8px;">
+      <div style="margin-top:8px; text-align:right;">
+        <button class="btn" onclick="closeOverlay()">ยกเลิก</button>
+        <button class="btn" id="btnSendSlip" onclick="sendSlipToAdmin(${orderId})" disabled>ส่งสลิปไปที่ร้าน</button>
+      </div>
+    </div>
+  `;
+  // enable send when file selected
+  const fileInput = document.getElementById("popupSlipFile");
+  fileInput.addEventListener("change", ()=>{
+    const btn = document.getElementById("btnSendSlip");
+    btn.disabled = !fileInput.files.length;
+  });
+}
+
+// send slip (upload + update order.payment_method & payment_slip)
+async function sendSlipToAdmin(orderIdParam){
+  const fileInput = document.getElementById("popupSlipFile");
+  if(!fileInput || !fileInput.files || !fileInput.files[0]) return alert("กรุณาเลือกไฟล์สลิปก่อน");
+  const f = fileInput.files[0];
+  // แปลงชื่อไฟล์ให้ปลอดภัย (เอาภาษาไทยและเครื่องหมายแปลก ๆ ออก)
+function sanitizeFileName(name) {
+  return name
+    .normalize("NFD")                         // แยกตัวอักษร
+    .replace(/[\u0300-\u036f]/g, "")          // ตัด tone mark
+    .replace(/[^a-zA-Z0-9._-]/g, "_");        // อนุญาตเฉพาะ A-Z 0-9 . _ -
+}
+
+const safeName = sanitizeFileName(f.name);
+const fname = `slip_${orderIdParam}_${Date.now()}_${safeName}`;
+
+// upload
+const { data: uploadData, error: uploadError } = await supabaseClient
+  .storage
+  .from("payment-slip")
+  .upload(fname, f, {
+    cacheControl: "3600",
+    contentType: f.type
+  });
+
+if (uploadError) {
+  console.error(uploadError);
+  alert("อัปโหลดสลิปล้มเหลว");
+  return;
+}
+  if (uploadError) {
+  console.error(uploadError);
+  alert("อัปโหลดสลิปล้มเหลว");
+  return;
+}
+  const { data: urlData } = supabaseClient.storage.from("payment-slip").getPublicUrl(fname);
+  const publicUrl = urlData.publicUrl;
+  // update order
+  const { error } = await supabaseClient.from("orders").update({ payment_method:"QR", payment_slip: publicUrl }).eq("id", orderIdParam);
+  if(error){ console.error(error); return alert("บันทึกไม่สำเร็จ: "+error.message); }
+  closeOverlay();
+  await loadOrder();
+  alert("ส่งสลิปเรียบร้อย ระบบจะรอการตรวจสอบจากร้าน");
+}
+
+// open Cash popup
+function openCashPay(total){
+  const overlay = document.getElementById("overlay");
+  overlay.style.display = "flex";
+  document.getElementById("modalContent").innerHTML = `
+    <h4>ชำระด้วยเงินสด</h4>
+    <div class="muted">ยอดที่ต้องชำระ: <b>฿${Number(total).toLocaleString()}</b></div>
+    <div style="margin-top:8px;">
+      <label>จำนวนเงินที่ลูกค้าให้: <input type="number" id="cashGiven" min="0" step="1"></label>
+      <div style="margin-top:8px;">เงินทอน: <span id="cashChange">-</span></div>
+    </div>
+    <div style="margin-top:12px; text-align:right;">
+      <button class="btn" onclick="closeOverlay()">ยกเลิก</button>
+      <button class="btn" id="btnSendCash" onclick="sendCashToAdmin(${orderId}, ${total})" disabled>ส่งยอดให้ร้าน</button>
+    </div>
+  `;
+  const cashGiven = document.getElementById("cashGiven");
+  cashGiven.addEventListener("input", ()=>{
+    const val = Number(cashGiven.value || 0);
+    const change = val - Number(total || 0);
+    document.getElementById("cashChange").innerText = change >= 0 ? `฿${change.toLocaleString()}` : `ยังไม่พอ (ขาด ฿${Math.abs(change).toLocaleString()})`;
+    document.getElementById("btnSendCash").disabled = (val < Number(total || 0));
+  });
+}
+
+// send cash confirmation (update order with cash_paid and cash_change)
+async function sendCashToAdmin(orderIdParam, total){
+  const val = Number(document.getElementById("cashGiven").value || 0);
+  if(val < Number(total)) return alert("จำนวนเงินยังไม่พอ");
+  const change = val - Number(total);
+  const { error } = await supabaseClient.from("orders").update({ payment_method:"เงินสด", cash_paid: val, cash_change: change }).eq("id", orderIdParam);
+  if(error){ console.error(error); return alert("บันทึกไม่สำเร็จ: "+error.message); }
+  closeOverlay();
+  await loadOrder();
+  alert("แจ้งยอดเงินเรียบร้อย ระบบจะรอการตรวจสอบจากร้าน");
+}
+
+/* overlay helpers */
+function closeOverlay(){ document.getElementById("overlay").style.display = "none"; document.getElementById("modalContent").innerHTML = ""; }
+
+function subscribeRealtime(){
+  // unsubscribe previous
+  try { supabaseClient.removeAllChannels(); } catch(e){}
+  supabaseClient.channel("orders")
+    .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `id=eq.${orderId}` },
+      payload => {
+        const row = payload.new || payload.record;
+        if(row) { currentOrder = row; renderOrder(row); }
+      })
+    .subscribe();
+}
+
+function confirmCancelOrder(){
+  const overlay = document.getElementById("overlay");
+  overlay.style.display = "flex";
+
+  document.getElementById("modalContent").innerHTML = `
+    <h4>ยืนยันการยกเลิกออเดอร์</h4>
+    <div class="muted">
+      คุณแน่ใจหรือไม่ว่าต้องการ <b style="color:red;">ยกเลิกออเดอร์นี้</b> ?
+    </div>
+
+    <div style="margin-top:14px; text-align:right;">
+      <button class="btn" style="background:#ccc;color:#333;"
+              onclick="closeOverlay()">ยกเลิก</button>
+      <button class="btn" style="background:#ff3b3b;"
+              onclick="cancelOrderConfirmed()">ตกลง</button>
+    </div>
+  `;
+}
+
+async function cancelOrderConfirmed(){
+  const { error } = await supabaseClient
+    .from("orders")
+    .update({ status: "ยกเลิก" })
+    .eq("id", orderId);
+
+  if(error){
+    console.error(error);
+    alert("ยกเลิกออเดอร์ไม่สำเร็จ");
+    return;
+  }
+
+  closeOverlay();
+  alert("ยกเลิกออเดอร์เรียบร้อยแล้ว");
+  await loadOrder();
+}
+
+function editOrder(){
+  localStorage.setItem("appendOrderMode", "edit");
+  localStorage.setItem("editOrderId", orderId);
+  window.location.href = "Menu.html";
+}
+
+/* navigation */
+function backHome(){ localStorage.removeItem("currentOrderId"); localStorage.removeItem("appendOrderMode"); window.location.href = "index.html"; }
+function addMore(){ localStorage.setItem("appendOrderMode", "1"); window.location.href = "Menu.html"; }
+</script>
+</head>
+<body>
+<header>สถานะออเดอร์ของคุณ</header>
+
+<div class="container" id="container">
+  <div class="info-row">
+    <div class="info"><div class="label">Order ID</div><div class="value" id="orderId">-</div></div>
+    <div class="info"><div class="label">บ้านเลขที่</div><div class="value" id="house">-</div></div>
+    <div class="info"><div class="label">คิวอาหาร</div><div class="value" id="queue">-</div></div>
+    <div class="info"><div class="label">สถานะ</div><div class="value" id="status">-</div></div>
+  </div>
+
+  <h3>รายละเอียดอาหารที่สั่ง</h3>
+  <div class="menu-list" id="menuList"><div class="muted">กำลังโหลดรายการ...</div></div>
+
+  <div class="pay-section">
+    <div class="qr-box">
+      <h3>การชำระเงิน</h3>
+      <div id="qrBox" class="muted">กำลังโหลด...</div>
+    </div>
+    <div class="delivery-box">
+      <h3>สลิป / รูปการส่ง</h3>
+      <div id="slipBox" class="muted">กำลังโหลด...</div>
+      <div id="deliveryImg"></div>
+    </div>
+  </div>
+
+  <div style="text-align:center; margin-top:12px;">
+  <button class="btn" id="btnAdd" onclick="addMore()">🍛 สั่งอาหารเพิ่ม</button>
+
+  <button class="btn" onclick="editOrder()">✏️ แก้ไขออเดอร์</button>
+
+  <button class="btn" style="background:#ccc;color:#333;"
+          onclick="confirmCancelOrder()">❌ ยกเลิกออเดอร์</button>
+
+  <button class="btn" onclick="backHome()">🏠 กลับหน้าหลัก</button>
+</div>
+  <div class="small" style="text-align:center; margin-top:8px;">ระบบจะอัปเดตสถานะอัตโนมัติแบบเรียลไทม์</div>
+</div>
+
+<!-- overlay/modal -->
+<div id="overlay" class="overlay" style="display:none; align-items:center; justify-content:center;">
+  <div class="modal" id="modalBox">
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<script> /* auto init done on load */ </script>
+</body>
+</html>
