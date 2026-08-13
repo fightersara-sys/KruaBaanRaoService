@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>ร้านครัวบ้านเรา - ยินดีต้อนรับ</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #ff6600;
+      --primary-gradient: linear-gradient(135deg, #ff9248 0%, #ff6600 100%);
+      --bg-soft: #fffaf5;
+      --text-dark: #333;
+      --white: #ffffff;
+      --shadow: 0 10px 30px rgba(255, 102, 0, 0.1);
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; cursor: default; }
+
+    body { margin: 0; font-family: 'Sarabun', sans-serif; background: var(--bg-soft); overflow-x: hidden; }
+
+    .bg-blur {
+      position: fixed; inset: 0;
+      background-size: cover; background-position: center;
+      filter: blur(10px) brightness(0.9); opacity: 0.15;
+      z-index: -1; transform: scale(1.1);
+    }
+
+    .overlay { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+
+    .card { 
+      background: var(--white); padding: 40px 30px; border-radius: 30px; 
+      box-shadow: var(--shadow); text-align: center; width: 100%; max-width: 360px;
+      border: 1px solid rgba(255, 102, 0, 0.05);
+    }
+
+    .brand-logo {
+      width: 250px; height: 250px; object-fit: contain;
+      margin-bottom: -50px; display: none; margin-left: auto; margin-right: auto;
+      filter: drop-shadow(0 10px 15px rgba(255, 102, 0, 0.2));
+    }
+
+    .title { color: var(--primary); font-size: 28px; margin: 5px 0; font-weight: 700; }
+    .concept { font-size: 15px; margin-bottom: 30px; color: #777; font-weight: 300; }
+
+    input {
+      width: 100%; padding: 16px; border: 2px solid #f0f0f0; border-radius: 16px;
+      font-size: 16px; outline: none; background: #fafafa; text-align: center;
+      user-select: text; cursor: text; transition: 0.3s;
+    }
+    input:focus { border-color: var(--primary); background: #fff; box-shadow: 0 0 15px rgba(255, 102, 0, 0.1); }
+
+    button {
+      width: 100%; padding: 16px; border: none; border-radius: 16px;
+      font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 12px; transition: 0.3s;
+    }
+
+    button.main { background: var(--primary-gradient); color: white; box-shadow: 0 8px 20px rgba(255, 102, 0, 0.25); }
+    button.main:hover { transform: translateY(-2px); box-shadow: 0 12px 25px rgba(255, 102, 0, 0.35); }
+    button.secondary { background: white; color: #666; border: 1px solid #ddd; }
+    button:active { transform: scale(0.97); }
+
+    .meta { margin-top: 30px; font-size: 13px; color: #aaa; border-top: 1px solid #f5f5f5; padding-top: 20px; }
+    #shopClosedBox { background: #fff1f0; border-radius: 20px; padding: 20px; border: 1px solid #ffa39e; color: #cf1322; }
+
+    @media (max-width: 480px) { .overlay { align-items: flex-start; padding-top: 5vh; } }
+  </style>
+  <script src="https://unpkg.com/@supabase/supabase-js"></script>
+  <script>
+    /* สคริปต์เดิมของคุณทั้งหมด... */
+    const supabaseUrl = "https://vxutzcrwqbnkcwxtdphy.supabase.co";
+    const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4dXR6Y3J3cWJua2N3eHRkcGh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0NzkzNDQsImV4cCI6MjA3NTA1NTM0NH0.zwbcu_4eGAiRTaX7QBwgrJhWgCda58FW-boeJM-ZlKg";
+    const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+    function isWithinOpenTime(open, close) {
+      if (!open || !close) return true;
+      const now = new Date();
+      const [oh, om] = open.split(":").map(Number);
+      const [ch, cm] = close.split(":").map(Number);
+      const start = new Date(); start.setHours(oh, om, 0, 0);
+      const end = new Date(); end.setHours(ch, cm, 0, 0);
+      return now >= start && now <= end;
+    }
+
+    async function loadStoreInfo() {
+      const { data } = await supabaseClient.from("store_settings").select("*").eq("id", 1).single();
+      if (!data) return;
+      if (data.logo_url) {
+        const logo = document.getElementById("storeLogo");
+        logo.src = data.logo_url; logo.style.display = "block";
+      }
+      document.getElementById("storeTitle").innerText = data.store_name || "ร้านครัวบ้านเรา";
+      document.getElementById("storeConcept").innerText = data.store_concept || "";
+      document.getElementById("storeMeta").innerHTML = `<b>เวลาเปิด:</b> ${data.open_time} - ${data.close_time}<br><b>LINE ID:</b> ${data.line_id}`;
+      if (data.store_background) document.getElementById("bgImage").style.backgroundImage = `url('${data.store_background}')`;
+    }
+
+    async function goToMenu() {
+      const house = document.getElementById("houseNumber").value.trim();
+      if (!house) return alert("กรุณากรอกบ้านเลขที่");
+      localStorage.setItem("houseNumber", house); window.location.href = "Menu.html";
+    }
+
+    async function checkOrder() {
+      let houseNo = prompt("กรอกบ้านเลขที่ของคุณเพื่อดูสถานะออเดอร์");
+      if (!houseNo) return;
+      houseNo = houseNo.trim(); // ตัดช่องว่างส่วนเกินออก
+      
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      
+      // ดึงออเดอร์ทั้งหมดของวันนี้ (ที่ยังไม่ยกเลิก) มาก่อน
+      const { data, error } = await supabaseClient
+        .from("orders")
+        .select("id, house")
+        .not("status", "eq", "ยกเลิก")
+        .gte("created_at", startOfToday.toISOString())
+        .order("created_at", { ascending: false });
+        
+      if (error || !data || data.length === 0) {
+        return alert("ไม่พบออเดอร์ที่กำลังดำเนินการของวันนี้ครับ");
+      }
+
+      // ใช้ Javascript ค้นหาบ้านเลขที่แบบยืดหยุ่น (เจอแบบเป๊ะๆ หรือ เจอแบบมีหมายเหตุต่อท้าย)
+      const foundOrder = data.find(o => {
+        const h = (o.house || "").trim();
+        return h === houseNo || h.startsWith(`${houseNo} (หมายเหตุ:`);
+      });
+
+      if (!foundOrder) {
+        return alert("ไม่พบออเดอร์ของบ้านเลขที่นี้ที่กำลังดำเนินการอยู่ครับ");
+      }
+
+      // ถ้าเจอแล้ว ให้เข้าสู่หน้าสถานะ
+      localStorage.setItem("houseNumber", houseNo); 
+      localStorage.setItem("currentOrderId", foundOrder.id); 
+      window.location.href = "order-status.html";
+    }
+
+    async function initIndex() {
+      const { data } = await supabaseClient.from("shop_settings").select("is_open").eq("id", 1).maybeSingle();
+      const isOpen = data?.is_open !== false;
+      document.getElementById("orderSection").style.display = isOpen ? "block" : "none";
+      document.getElementById("shopClosedBox").style.display = isOpen ? "none" : "block";
+    }
+
+    window.onload = async () => { await loadStoreInfo(); await initIndex(); };
+  </script>
+</head>
+<body>
+  <div id="bgImage" class="bg-blur"></div>
+  <div class="overlay">
+    <div class="card">
+      <img id="storeLogo" class="brand-logo" />
+      <div id="storeTitle" class="title">กำลังโหลด...</div>
+      <div id="storeConcept" class="concept"></div>
+      <div id="orderSection" style="display:none;">
+        <input type="text" id="houseNumber" placeholder="ระบุบ้านเลขที่ของคุณ">
+        <button class="main" onclick="goToMenu()">🏠 เริ่มสั่งอาหารเลย</button>
+        <button class="secondary" onclick="checkOrder()">🔍 ตรวจสอบออเดอร์</button>
+      </div>
+      <div id="shopClosedBox" style="display:none; text-align:center;">
+        <h2>🚫 ร้านปิดรับออเดอร์</h2>
+        <p>ขออภัยในความไม่สะดวกครับ</p>
+      </div>
+      <div id="storeMeta" class="meta"></div>
+    </div>
+  </div>
+</body>
+</html>
